@@ -6,77 +6,102 @@
 <!-- http://webdev.jp.net/radio-switch-custom-css/ -->
 <form name="onoffradio" class="onoffradio">
     <div class="either">
-        <input type="radio" name="user1" id="radio_1" value="1" onchange="onChange(this)" />
-        <label for="radio_1" data-label="在">在</label>
-        <input type="radio" name="user1" id="radio_0" value="0" onchange="onChange(this)" checked />
-        <label for="radio_0" data-label="帰宅">帰宅</label>
+        <input type="radio" name="user1" id="radio_0" value="1" />
+        <label for="radio_0" data-label="在">在</label>
+        <input type="radio" name="user1" id="radio_1" value="0" checked />
+        <label for="radio_1" data-label="帰宅">帰宅</label>
     </div>
     <p>
     <div class="either">
-        <input type="radio" name="user2" id="radio_3" value="1" onchange="onChange(this)" />
-        <label for="radio_3" data-label="在">在</label>
-        <input type="radio" name="user2" id="radio_2" value="0" onchange="onChange(this)" checked />
-        <label for="radio_2" data-label="帰宅">帰宅</label>
+        <input type="radio" name="user2" id="radio_2" value="1" />
+        <label for="radio_2" data-label="在">在</label>
+        <input type="radio" name="user2" id="radio_3" value="0" checked />
+        <label for="radio_3" data-label="帰宅">帰宅</label>
     </div>
-    <p><input type="button" value="GET" onclick="getShadowState()">
 </form>
 
 <script language="javascript">
 const URL = 'http://localhost:8080/things/syuttaikinBoard/shadow';
-const INTERVAL = 60000; // 1[min]
+const INTERVAL = 60000; // 1[min]。定期的に状態をアップロードする間隔
+const XHRTIMEOUT = 30000;
 var timer;
+var desired = {}; // タッチ操作による制御要望
+
+function getOnOffValue(v) {
+    return (v == 1) ? 1 : 0; // vが文字列"0"の場合は0にする
+}
 
 function onLoad() {
+    var form = document.forms.onoffradio;
+    form.addEventListener('change', onChange);
+    // ブラウザ再起動した際でも、前回状態を再現
     Object.keys(localStorage).forEach(function (key) {
-        if (localStorage.getItem(key) == 1) {
-            document.onoffradio[key][0].checked = true;
-        } else {
-            document.onoffradio[key][1].checked = true;
-        }
+        form[key].value = getOnOffValue(localStorage.getItem(key));
     });
-    updateShadowStateAndStartTimer({});
-}
-
-function onChange(item) {
-    var user = item.name;
-    var value = item.value;
-    var isOn = (value == 1);
-    var desired = {}; // タッチ操作による制御要望
-    if (isOn) {
-        localStorage.setItem(user, 1);
-        desired[user] = 1;
-    } else {
-        localStorage.setItem(user, 0);
-        desired[user] = 0;
+    // サーバにアップロードするreported情報に全ユーザを含めるため
+    for (var i = 0; i < form.length; i++) {
+        if (form[i].checked) {
+            var user = form[i].name;
+            var value = getOnOffValue(form[i].value);
+            localStorage.setItem(user, value);
+        }
     }
-    updateShadowStateAndStartTimer(desired);
+    updateShadowStateAndStartTimer();
 }
 
-function updateShadowStateAndStartTimer(desired) {
-    clearTimeout(timer);
-    updateShadowState(desired, function () {
+// タッチ操作で変更された時に、制御要望と状態をアップロード
+function onChange(e) {
+    if (e.target.type != 'radio') {
+        return;
+    }
+    var user = e.target.name;
+    var value = getOnOffValue(e.target.value);
+    localStorage.setItem(user, value);
+    // 制御要望をアップロードしないと、
+    // 他端末からREST APIで登録された要望が有効なままになる
+    desired[user] = value;
+    updateShadowStateAndStartTimer();
+}
+
+function updateShadowStateAndStartTimer() {
+    updateShadowState(function () {
+        // 定期的にアップロード
+        clearTimeout(timer);
         timer = setTimeout(function () {
-            updateShadowStateAndStartTimer({});
+            updateShadowStateAndStartTimer();
         }, INTERVAL);
     });
 }
 
-function updateShadowState(desired, cb) {
+// サーバ(device shadow)に状態(とタッチ操作による制御要望)をアップロードし、
+// サーバからの制御指示取得
+function updateShadowState(cb) {
     //console.log(JSON.stringify(localStorage));
     var xhr = new XMLHttpRequest();
+    xhr.timeout = XHRTIMEOUT;
     xhr.open("POST", URL);
     xhr.setRequestHeader("Content-Type", "application/json");
     xhr.addEventListener('load', function (event) {
         //console.log('xhr load:', xhr.responseText);
+        if (xhr.status != 200) {
+            console.log('xhr status not 200:' + xhr.status + ':' + xhr.statusText);
+            cb();
+            return;
+        }
+        desired = {}; // 制御要望は送信完了したのでクリア。(エラー時は再送)
         var body = JSON.parse(xhr.responseText);
         onGetShadowState(body.state, cb);
     });
-    xhr.addEventListener('error', function (event) {
-        console.log('xhr error:', event);
+    xhr.addEventListener('error', function (ev) {
+        console.log('xhr error');
         cb();
     });
-    xhr.addEventListener('abort', function (event) {
-        console.log('xhr abort:', event);
+    xhr.addEventListener('abort', function (ev) {
+        console.log('xhr abort');
+        cb();
+    });
+    xhr.addEventListener('timeout', function (ev) {
+        console.log('xhr timeout');
         cb();
     });
     xhr.send(JSON.stringify({
@@ -87,39 +112,20 @@ function updateShadowState(desired, cb) {
     }));
 }
 
-function getShadowState() {
-    var xhr = new XMLHttpRequest();
-    xhr.open("GET", URL);
-    xhr.setRequestHeader("Content-Type", "application/json");
-    xhr.addEventListener('load', function (event) {
-        //console.log('xhr load:', xhr.responseText);
-        var body = JSON.parse(xhr.responseText);
-        onGetShadowState(body.state, function () {});
-    });
-    xhr.addEventListener('error', function (event) {
-        console.log('xhr error:', event);
-    });
-    xhr.addEventListener('abort', function (event) {
-        console.log('xhr abort:', event);
-    });
-    xhr.send();
-}
-
+// サーバからの制御を反映
 function onGetShadowState(state, cb) {
     if (!state.delta || Object.keys(state.delta).length == 0) {
         cb();
         return;
     }
+    var form = document.forms.onoffradio;
     Object.keys(state.delta).forEach(function (key) {
-        if (state.delta[key] == 1) {
-            document.onoffradio[key][0].checked = true;
-            localStorage.setItem(key, 1);
-        } else {
-            document.onoffradio[key][1].checked = true;
-            localStorage.setItem(key, 0);
-        }
+        var value = getOnOffValue(state.delta[key]);
+        form[key].value = value;
+        localStorage.setItem(key, value);
     });
-    updateShadowState({}, cb);
+    // 反映後の状態をアップロード
+    updateShadowState(cb);
 }
 </script>
 
@@ -261,8 +267,8 @@ function onGetShadowState(state, cb) {
         background: #E71063;
         /*border: 4px solid #fff;*/
          
-        -webkit-transition: all 200ms;
-        transition: all 200ms;
+        -webkit-transition: all 100ms;
+        transition: all 100ms;
     }
      
     .onoffradio .either input[type=radio]:checked + label + input[type=radio] + label::after {
