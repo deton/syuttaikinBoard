@@ -1,0 +1,287 @@
+<html>
+<head>
+<meta charset="utf-8">
+</head>
+<body onload="onLoad()">
+<!-- http://webdev.jp.net/radio-switch-custom-css/ -->
+<form name="onoffradio" class="onoffradio">
+    <div class="either">
+        <input type="radio" name="user1" id="radio_1" value="1" onchange="onChange(this)" />
+        <label for="radio_1" data-label="在">在</label>
+        <input type="radio" name="user1" id="radio_0" value="0" onchange="onChange(this)" checked />
+        <label for="radio_0" data-label="帰宅">帰宅</label>
+    </div>
+    <p>
+    <div class="either">
+        <input type="radio" name="user2" id="radio_3" value="1" onchange="onChange(this)" />
+        <label for="radio_3" data-label="在">在</label>
+        <input type="radio" name="user2" id="radio_2" value="0" onchange="onChange(this)" checked />
+        <label for="radio_2" data-label="帰宅">帰宅</label>
+    </div>
+    <p><input type="button" value="GET" onclick="getShadowState()">
+</form>
+
+<script language="javascript">
+const URL = 'http://localhost:8080/things/syuttaikinBoard/shadow';
+const INTERVAL = 60000; // 1[min]
+var timer;
+
+function onLoad() {
+    Object.keys(localStorage).forEach(function (key) {
+        if (localStorage.getItem(key) == 1) {
+            document.onoffradio[key][0].checked = true;
+        } else {
+            document.onoffradio[key][1].checked = true;
+        }
+    });
+    updateShadowStateAndStartTimer({});
+}
+
+function onChange(item) {
+    var user = item.name;
+    var value = item.value;
+    var isOn = (value == 1);
+    var desired = {}; // タッチ操作による制御要望
+    if (isOn) {
+        localStorage.setItem(user, 1);
+        desired[user] = 1;
+    } else {
+        localStorage.setItem(user, 0);
+        desired[user] = 0;
+    }
+    updateShadowStateAndStartTimer(desired);
+}
+
+function updateShadowStateAndStartTimer(desired) {
+    clearTimeout(timer);
+    updateShadowState(desired, function () {
+        timer = setTimeout(function () {
+            updateShadowStateAndStartTimer({});
+        }, INTERVAL);
+    });
+}
+
+function updateShadowState(desired, cb) {
+    //console.log(JSON.stringify(localStorage));
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", URL);
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.addEventListener('load', function (event) {
+        //console.log('xhr load:', xhr.responseText);
+        var body = JSON.parse(xhr.responseText);
+        onGetShadowState(body.state, cb);
+    });
+    xhr.addEventListener('error', function (event) {
+        console.log('xhr error:', event);
+        cb();
+    });
+    xhr.addEventListener('abort', function (event) {
+        console.log('xhr abort:', event);
+        cb();
+    });
+    xhr.send(JSON.stringify({
+        state: {
+            desired: desired,
+            reported: localStorage
+        }
+    }));
+}
+
+function getShadowState() {
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", URL);
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.addEventListener('load', function (event) {
+        //console.log('xhr load:', xhr.responseText);
+        var body = JSON.parse(xhr.responseText);
+        onGetShadowState(body.state, function () {});
+    });
+    xhr.addEventListener('error', function (event) {
+        console.log('xhr error:', event);
+    });
+    xhr.addEventListener('abort', function (event) {
+        console.log('xhr abort:', event);
+    });
+    xhr.send();
+}
+
+function onGetShadowState(state, cb) {
+    if (!state.delta || Object.keys(state.delta).length == 0) {
+        cb();
+        return;
+    }
+    Object.keys(state.delta).forEach(function (key) {
+        if (state.delta[key] == 1) {
+            document.onoffradio[key][0].checked = true;
+            localStorage.setItem(key, 1);
+        } else {
+            document.onoffradio[key][1].checked = true;
+            localStorage.setItem(key, 0);
+        }
+    });
+    updateShadowState({}, cb);
+}
+</script>
+
+<style type="text/css">
+.onoffradio input[type=radio] {
+    display: inline-block;
+    margin-right: 12px;
+}
+.onoffradio input[type=radio] + label {
+    position: relative;
+      
+    display: inline-block;
+    margin-right: 24px;
+      
+    font-size: 28px;
+    line-height: 60px;
+      
+    cursor: pointer;
+}
+  
+@media (min-width: 1px) {
+    .onoffradio input[type=radio] {
+        display: none;
+        margin: 0;
+    }
+    .onoffradio input[type=radio] + label {
+        padding: 0 0 0 48px;
+    }
+    .onoffradio input[type=radio] + label::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 0;
+          
+        -moz-box-sizing: border-box;
+        box-sizing: border-box;
+        display: block;
+        width: 36px;
+        height: 36px;
+        margin-top: -18px;
+          
+        background: #FFF;
+    }
+    .onoffradio input[type=radio] + label::before {
+        border: 4px solid #ccc;
+        border-radius: 60px;
+    }
+    .onoffradio input[type=radio]:checked + label::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+          
+        -moz-box-sizing: border-box;
+        box-sizing: border-box;
+        display: block;
+    }
+    .onoffradio input[type=radio]:checked + label::after {
+        left: 10px;
+          
+        width: 16px;
+        height: 16px;
+        margin-top: -8px;
+          
+        background: #E71063;
+        border-radius: 16px;
+    }
+     
+    /* either */
+    .onoffradio .either {
+        position: relative;
+         
+        display: inline-block;
+        width: 240px;
+        overflow: hidden;
+        border: 4px solid #ccc;
+    }
+    .onoffradio .either input[type=radio] + label {
+        position: static;
+         
+        float: left;
+        display: block;
+        width: 50%;
+        margin-right: 0;
+        padding: 0;
+        overflow: hidden;
+         
+        text-align: center;
+        background: #ddd;
+    }
+    .onoffradio .either input[type=radio] + label::before {
+        content: attr(data-label);
+         
+        top: 0;
+        bottom: 0;
+        z-index: 1;
+         
+        display: block;
+        width: 50%;
+        height: auto;
+        margin-top: 0;
+         
+        text-align: center;
+         
+        color: gray;
+        background: transparent;
+        border: 0 none;
+        /*border-radius: 0;*/
+        border-radius: 60px;
+    }
+    .onoffradio .either input[type=radio] + label:last-child::before {
+        left: 50%;
+        right: 0;
+         
+    }
+    .onoffradio .either input[type=radio]:checked + label::before {
+        color: #fff;
+    }
+     
+    .onoffradio .either input[type=radio] + label::after {
+        /*border-radius: 0;*/
+        border-radius: 60px;
+    }
+    .onoffradio .either input[type=radio]:first-child + label::after {
+        content: none;
+    }
+    .onoffradio .either input[type=radio] + label + input[type=radio] + label::after {
+        content: "";
+         
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        z-index: 0;
+         
+        display: block;
+        width: auto;
+        height: auto;
+        margin: auto;
+         
+        background: #E71063;
+        /*border: 4px solid #fff;*/
+         
+        -webkit-transition: all 200ms;
+        transition: all 200ms;
+    }
+     
+    .onoffradio .either input[type=radio]:checked + label + input[type=radio] + label::after {
+        left: 0;
+        right: 50%;
+    }
+    .onoffradio .either input[type=radio] + label + input[type=radio]:checked + label::after {
+        left: 50%;
+        right: 0;
+        /*background: #EB9BBA;*/
+    }
+    .onoffradio .either input[type=radio]:first-child:checked + label {
+        background: #fff;
+    }
+    .onoffradio .either input[type=radio]:checked + label + input[type=radio] + label {
+        background: #fff;
+    }
+     
+}
+</style>
+</body>
+</html>
