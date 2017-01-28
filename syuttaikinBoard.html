@@ -12,16 +12,18 @@
         <label for="radio_1" data-label="帰宅">帰宅</label>
     </div>
     <p>
+    <!--
     <div class="either">
         <input type="radio" name="user2@example.jp" id="radio_2" value="1" />
         <label for="radio_2" data-label="在">在</label>
         <input type="radio" name="user2@example.jp" id="radio_3" value="0" checked />
         <label for="radio_3" data-label="帰宅">帰宅</label>
     </div>
+    -->
 </form>
 
 <script language="javascript">
-const URL = 'http://localhost:8080/things/syuttaikinBoard/shadow';
+const URL = 'http://localhost:35035/things/syuttaikinBoard/shadow';
 const INTERVAL = 60000; // 1[min]。定期的に状態をアップロードする間隔
 const XHRTIMEOUT = 30000;
 var timer;
@@ -41,6 +43,9 @@ State.prototype.clearDesired = function clearDesired() {
 State.prototype.setReported = function setReported(key, value) {
     this.reported[key] = value;
     this._save();
+}
+State.prototype.clearReported = function clearReported() {
+    this.reported = {};
 }
 State.prototype.stringify = function stringify() {
     return JSON.stringify({
@@ -73,8 +78,17 @@ function onLoad() {
     // ブラウザ再起動した際でも、前回状態を再現
     state.load();
     Object.keys(state.reported).forEach(function (key) {
-        form[key].value = getOnOffValue(state.reported[key]);
+        // XXX:古いブラウザ(Android 4.0ブラウザ等)では動かない
+        //form[key].value = getOnOffValue(state.reported[key]);
+        var value = getOnOffValue(state.reported[key]);
+        for (var i = 0; i < form.length; i++) {
+            if (form[i].name == key && form[i].value == value) {
+                form[i].checked = true;
+                break;
+            }
+        }
     });
+    state.clearReported(); // HTMLにあるユーザのみにするため
     // サーバにアップロードするreported情報に全ユーザを含めるため
     for (var i = 0; i < form.length; i++) {
         if (form[i].checked) {
@@ -153,7 +167,13 @@ function onGetShadowState(st, cb) {
     var form = document.forms.onoffradio;
     Object.keys(st.delta).forEach(function (key) {
         var value = getOnOffValue(st.delta[key]);
-        form[key].value = value;
+        // XXX:古いブラウザ(Android 4.0ブラウザ等)では動かない
+        //form[key].value = value;
+        for (var i = 0; i < form.length; i++) {
+            if (form[i].name == key && form[i].value == value) {
+                form[i].checked = true;
+            }
+        }
         state.setReported(key, value);
     });
     // 反映後の状態をアップロード
@@ -299,8 +319,10 @@ function onGetShadowState(st, cb) {
         background: #E71063;
         /*border: 4px solid #fff;*/
          
+        /*
         -webkit-transition: all 100ms;
         transition: all 100ms;
+        */
     }
      
     .onoffradio .either input[type=radio]:checked + label + input[type=radio] + label::after {
