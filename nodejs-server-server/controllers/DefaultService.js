@@ -1,15 +1,6 @@
 'use strict';
 
-var state = {
-  desired: {},
-  reported: {},
-  delta: {}
-};
-
-var metadata = {
-  desired: {},
-  reported: {}
-};
+var things = {};
 
 exports.getThingShadow = function(args, res, next) {
   /**
@@ -19,7 +10,12 @@ exports.getThingShadow = function(args, res, next) {
    * returns ResponseStateDocument
    **/
   res.setHeader('Content-Type', 'application/json');
-  res.end(JSON.stringify({state: state, metadata: metadata}, null, 2));
+  if (args.thingName.value in things) {
+    res.end(JSON.stringify(things[args.thingName.value], null, 2));
+  } else {
+    res.writeHead(404);
+    res.end('{"code":404}');
+  }
 }
 
 exports.updateThingShadow = function(args, res, next) {
@@ -32,6 +28,22 @@ exports.updateThingShadow = function(args, res, next) {
    * returns ResponseStateDocument
    **/
   var timestamp = Math.round(Date.now() / 1000);
+  if (!(args.thingName.value in things)) {
+    things[args.thingName.value] = {
+      state: {
+        desired: {},
+        reported: {},
+        delta: {}
+      },
+      metadata: {
+        desired: {},
+        reported: {}
+      }
+    }
+  }
+  var state = things[args.thingName.value].state;
+  var metadata = things[args.thingName.value].metadata;
+
   Object.keys(args.body.value.state.desired || {}).forEach(function (key) {
     state.desired[key] = args.body.value.state.desired[key];
     metadata.desired[key] = {timestamp: timestamp};
@@ -52,6 +64,6 @@ exports.updateThingShadow = function(args, res, next) {
   res.setHeader('Content-Type', 'application/json');
   // AWS IoT thing shadow API returns only requested state document
   //res.end(JSON.stringify(args.body.value, null, 2));
-  res.end(JSON.stringify({state: state, metadata: metadata}, null, 2));
+  res.end(JSON.stringify(things[args.thingName.value], null, 2));
 }
 
