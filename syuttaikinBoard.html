@@ -6,16 +6,16 @@
 <!-- http://webdev.jp.net/radio-switch-custom-css/ -->
 <form name="onoffradio" class="onoffradio">
     <div class="either">
-        <input type="radio" name="user1" id="radio_0" value="1" />
+        <input type="radio" name="user1@example.jp" id="radio_0" value="1" />
         <label for="radio_0" data-label="在">在</label>
-        <input type="radio" name="user1" id="radio_1" value="0" checked />
+        <input type="radio" name="user1@example.jp" id="radio_1" value="0" checked />
         <label for="radio_1" data-label="帰宅">帰宅</label>
     </div>
     <p>
     <div class="either">
-        <input type="radio" name="user2" id="radio_2" value="1" />
+        <input type="radio" name="user2@example.jp" id="radio_2" value="1" />
         <label for="radio_2" data-label="在">在</label>
-        <input type="radio" name="user2" id="radio_3" value="0" checked />
+        <input type="radio" name="user2@example.jp" id="radio_3" value="0" checked />
         <label for="radio_3" data-label="帰宅">帰宅</label>
     </div>
 </form>
@@ -25,7 +25,43 @@ const URL = 'http://localhost:8080/things/syuttaikinBoard/shadow';
 const INTERVAL = 60000; // 1[min]。定期的に状態をアップロードする間隔
 const XHRTIMEOUT = 30000;
 var timer;
-var desired = {}; // タッチ操作による制御要望
+var state = new State();
+function State() {
+    this.desired = {}; // タッチ操作による制御要望
+    this.reported = {};
+}
+State.prototype.setDesired = function setDesired(key, value) {
+    this.desired[key] = value;
+    this._save();
+}
+State.prototype.clearDesired = function clearDesired() {
+    this.desired = {};
+    this._save();
+}
+State.prototype.setReported = function setReported(key, value) {
+    this.reported[key] = value;
+    this._save();
+}
+State.prototype.stringify = function stringify() {
+    return JSON.stringify({
+        state: {
+            desired: this.desired,
+            reported: this.reported
+        }
+    });
+}
+State.prototype._save = function _save() {
+    localStorage.setItem('state', this.stringify());
+}
+State.prototype.load = function load() {
+    var s = localStorage.getItem('state');
+    if (!s) {
+        return;
+    }
+    var st = JSON.parse(s);
+    this.desired = st.state.desired;
+    this.reported = st.state.reported;
+}
 
 function getOnOffValue(v) {
     return (v == 1) ? 1 : 0; // vが文字列"0"の場合は0にする
@@ -35,15 +71,16 @@ function onLoad() {
     var form = document.forms.onoffradio;
     form.addEventListener('change', onChange);
     // ブラウザ再起動した際でも、前回状態を再現
-    Object.keys(localStorage).forEach(function (key) {
-        form[key].value = getOnOffValue(localStorage.getItem(key));
+    state.load();
+    Object.keys(state.reported).forEach(function (key) {
+        form[key].value = getOnOffValue(state.reported[key]);
     });
     // サーバにアップロードするreported情報に全ユーザを含めるため
     for (var i = 0; i < form.length; i++) {
         if (form[i].checked) {
             var user = form[i].name;
             var value = getOnOffValue(form[i].value);
-            localStorage.setItem(user, value);
+            state.setReported(user, value);
         }
     }
     updateShadowStateAndStartTimer();
@@ -56,10 +93,10 @@ function onChange(e) {
     }
     var user = e.target.name;
     var value = getOnOffValue(e.target.value);
-    localStorage.setItem(user, value);
+    state.setReported(user, value);
     // 制御要望をアップロードしないと、
     // 他端末からREST APIで登録された要望が有効なままになる
-    desired[user] = value;
+    state.setDesired(user, value);
     updateShadowStateAndStartTimer();
 }
 
@@ -76,7 +113,7 @@ function updateShadowStateAndStartTimer() {
 // サーバ(device shadow)に状態(とタッチ操作による制御要望)をアップロードし、
 // サーバからの制御指示取得
 function updateShadowState(cb) {
-    //console.log(JSON.stringify(localStorage));
+    //console.log(state.stringify());
     var xhr = new XMLHttpRequest();
     xhr.timeout = XHRTIMEOUT;
     xhr.open("POST", URL);
@@ -88,7 +125,7 @@ function updateShadowState(cb) {
             cb();
             return;
         }
-        desired = {}; // 制御要望は送信完了したのでクリア。(エラー時は再送)
+        state.clearDesired(); // 制御要望は送信完なのでクリア(エラー時は再送)
         var body = JSON.parse(xhr.responseText);
         onGetShadowState(body.state, cb);
     });
@@ -104,25 +141,20 @@ function updateShadowState(cb) {
         console.log('xhr timeout');
         cb();
     });
-    xhr.send(JSON.stringify({
-        state: {
-            desired: desired,
-            reported: localStorage
-        }
-    }));
+    xhr.send(state.stringify());
 }
 
 // サーバからの制御を反映
-function onGetShadowState(state, cb) {
-    if (!state.delta || Object.keys(state.delta).length == 0) {
+function onGetShadowState(st, cb) {
+    if (!st.delta || Object.keys(st.delta).length == 0) {
         cb();
         return;
     }
     var form = document.forms.onoffradio;
-    Object.keys(state.delta).forEach(function (key) {
-        var value = getOnOffValue(state.delta[key]);
+    Object.keys(st.delta).forEach(function (key) {
+        var value = getOnOffValue(st.delta[key]);
         form[key].value = value;
-        localStorage.setItem(key, value);
+        state.setReported(key, value);
     });
     // 反映後の状態をアップロード
     updateShadowState(cb);
