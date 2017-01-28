@@ -1,0 +1,90 @@
+# http://docs.aws.amazon.com/iot/latest/developerguide/thing-shadow-rest-api.html
+swagger: '2.0'
+
+info:
+  version: "1.0.0"
+  title: Simple device shadow API
+
+basePath: /things
+paths:
+  /{thingName}/shadow:
+    get:
+      description: Gets the thing shadow for the specified thing.
+      operationId: getThingShadow
+      parameters:
+        -
+          name: thingName
+          in: path
+          description: thing name
+          required: true
+          type: string
+      responses:
+        200:
+          description: Successful response
+          schema:
+            $ref: "#/definitions/ResponseStateDocument"
+    post:
+      description: Updates the thing shadow for the specified thing.
+      operationId: updateThingShadow
+      parameters:
+        -
+          name: thingName
+          in: path
+          description: thing name
+          required: true
+          type: string
+        -
+          name: body
+          in: body
+          schema:
+            $ref: "#/definitions/RequestStateDocument"
+      responses:
+        200:
+          description: Successful response
+          schema:
+            $ref: "#/definitions/ResponseStateDocument"
+
+definitions:
+  RequestStateDocument:
+    type: object
+    properties:
+      state:
+        type: object
+        properties:
+          desired:
+            type: object
+            additionalProperties: true
+          reported:
+            type: object
+            additionalProperties: true
+  ResponseStateDocument:
+    type: object
+    properties:
+      state:
+        type: object
+        properties:
+          desired:
+            type: object
+            additionalProperties: true
+          reported:
+            type: object
+            additionalProperties: true
+          delta:
+            type: object
+            additionalProperties: true
+      metadata:
+        type: object
+        properties:
+          desired:
+            type: object
+            additionalProperties:
+              $ref: "#/definitions/Timestamp"
+          reported:
+            type: object
+            additionalProperties:
+              $ref: "#/definitions/Timestamp"
+  Timestamp:
+    type: object
+    properties:
+      timestamp:
+        type: integer
