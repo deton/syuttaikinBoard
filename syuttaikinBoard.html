@@ -11,7 +11,8 @@
         <input type="radio" name="user1@example.jp" id="radio_1" value="0" checked />
         <label for="radio_1" data-label="帰宅">帰宅</label>
     </div>
-    <p>
+    <div class="spacer">
+    </div>
     <!--
     <div class="either">
         <input type="radio" name="user2@example.jp" id="radio_2" value="1" />
@@ -115,12 +116,17 @@ function onChange(e) {
 }
 
 function updateShadowStateAndStartTimer() {
-    updateShadowState(function () {
+    updateShadowState(function (err) {
         // 定期的にアップロード
         clearTimeout(timer);
         timer = setTimeout(function () {
             updateShadowStateAndStartTimer();
         }, INTERVAL);
+        if (err) {
+            document.body.style.backgroundColor = 'yellow';
+        } else {
+            document.body.style.backgroundColor = 'white';
+        }
     });
 }
 
@@ -135,8 +141,9 @@ function updateShadowState(cb) {
     xhr.addEventListener('load', function (event) {
         //console.log('xhr load:', xhr.responseText);
         if (xhr.status != 200) {
-            console.log('xhr status not 200:' + xhr.status + ':' + xhr.statusText);
-            cb();
+            var msg = 'xhr status not 200:' + xhr.status + ':' + xhr.statusText;
+            console.log(msg);
+            cb(msg);
             return;
         }
         state.clearDesired(); // 制御要望は送信完なのでクリア(エラー時は再送)
@@ -144,16 +151,17 @@ function updateShadowState(cb) {
         onGetShadowState(body.state, cb);
     });
     xhr.addEventListener('error', function (ev) {
-        console.log('xhr error');
-        cb();
+        var msg = 'xhr error:' + xhr.statusText;
+        console.log(msg);
+        cb(msg);
     });
     xhr.addEventListener('abort', function (ev) {
         console.log('xhr abort');
-        cb();
+        cb('xhr abort');
     });
     xhr.addEventListener('timeout', function (ev) {
         console.log('xhr timeout');
-        cb();
+        cb('xhr timeout');
     });
     xhr.send(state.stringify());
 }
@@ -161,7 +169,7 @@ function updateShadowState(cb) {
 // サーバからの制御を反映
 function onGetShadowState(st, cb) {
     if (!st.delta || Object.keys(st.delta).length == 0) {
-        cb();
+        cb(null);
         return;
     }
     var form = document.forms.onoffradio;
@@ -182,6 +190,9 @@ function onGetShadowState(st, cb) {
 </script>
 
 <style type="text/css">
+.onoffradio .spacer {
+    height: 60px;
+}
 .onoffradio input[type=radio] {
     display: inline-block;
     margin-right: 12px;
